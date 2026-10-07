@@ -1,4 +1,4 @@
-const MODEL = "gemini-3.5-flash-lite";
+const MODEL = "gemini-2.5-flash";
 const GEMINI_URL =
   `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent`;
 
@@ -116,7 +116,8 @@ function safeString(value) {
   return typeof value === "string" ? value.trim() : "";
 }
 
-function buildPrompt(item) {
+
+function buildClassifyPrompt(item) {
   return `
 You are the classification engine for Eco Count.
 
@@ -131,7 +132,12 @@ provide URLs or citations. Return ONLY JSON matching this schema:
 {
   "verdict": "YES" | "NO" | "UNCLEAR",
   "reason": "short explanation",
-  "recognized_item": true | false
+  "recognized_item": true | false,
+  "actions": {
+    "reduce": "short practical tip or empty string",
+    "reuse": "short practical tip or empty string",
+    "recycle": "short practical tip or empty string"
+  }
 }
 
 Classification rules:
@@ -142,10 +148,50 @@ Classification rules:
 - If an item can reasonably be plastic, use YES even if it is also sold in
   non-plastic versions.
 - Do not assume a precise resin/recycling code unless you know it reliably.
-  This fallback only needs YES/NO/UNCLEAR.
 - Do not classify a random word, person's name, place name, or malformed input
   as an item.
 - Be conservative: when in doubt, return UNCLEAR rather than guessing.
+
+Advice rules for YES:
+- Generate item-specific advice for reducing future use, safely reusing the item,
+  and recycling/disposal.
+- Keep each tip to 1–2 concise sentences.
+- Recycling advice must acknowledge that local acceptance varies; do not claim a
+  specific local facility or collection program.
+- Never recommend unsafe food/drink reuse. Do not suggest reuse for food or drink
+  when the material, condition, or original purpose makes that unsafe.
+- Prefer practical actions a normal person can actually take.
+- For NO or UNCLEAR, return empty strings for all three actions.
+`;
+}
+
+function buildAdvicePrompt(item, plasticType, code) {
+  return `
+You are Eco Count's sustainability advice engine.
+
+Eco Count has already determined that this item is plastic or likely plastic.
+
+Item: "${item}"
+Plastic type/material: "${plasticType || "Plastic"}"
+Resin code: ${code ?? "unknown"}
+
+Return ONLY JSON matching this schema:
+{
+  "reduce": "short practical advice",
+  "reuse": "short practical advice",
+  "recycle": "short practical advice"
+}
+
+Rules:
+- Make the advice specific to the named item and material when possible.
+- Give one concise, realistic tip for each of reduce, reuse, and recycle.
+- Reduce should focus on avoiding or replacing future single-use plastic.
+- Reuse must be safe and realistic. Never recommend food/drink reuse when the
+  item is not clearly suitable, is damaged, has held chemicals, or hygiene is a concern.
+- Recycle advice must not claim that every plastic code is accepted everywhere.
+  Tell the user to check local municipal or recycler rules when relevant.
+- Do not invent collection centers, brands, laws, or local programs.
+- No URLs, citations, or web-search claims.
 `;
 }
 
@@ -206,6 +252,7 @@ export default async function handler(request, response) {
     return json(response, { error: "Invalid JSON request." }, 400, headers);
   }
 
+  const mode = body?.mode === "advice" ? "advice" : "classify";
   const item = safeString(body?.item);
 
   if (!item) {
@@ -220,6 +267,12 @@ export default async function handler(request, response) {
       headers
     );
   }
+
+  const plasticType = safeString(body?.plasticType);
+  const rawCode = body?.code;
+  const code = rawCode === null || rawCode === undefined || rawCode === ""
+    ? null
+    : String(rawCode).trim().slice(0, 20);
 
   const limit = rateLimit(getClientIp(request));
 
@@ -238,12 +291,15 @@ export default async function handler(request, response) {
     );
   }
 
+
   const bodyPayload = {
     contents: [
       {
         parts: [
           {
-            text: buildPrompt(item)
+            text: mode === "advice"
+              ? buildAdvicePrompt(item, plasticType, code)
+              : buildClassifyPrompt(item)
           }
         ]
       }
@@ -251,22 +307,41 @@ export default async function handler(request, response) {
     generationConfig: {
       temperature: 0,
       responseMimeType: "application/json",
-      responseSchema: {
-        type: "OBJECT",
-        properties: {
-          verdict: {
-            type: "STRING",
-            enum: ["YES", "NO", "UNCLEAR"]
-          },
-          reason: {
-            type: "STRING"
-          },
-          recognized_item: {
-            type: "BOOLEAN"
+      responseSchema: mode === "advice"
+        ? {
+            type: "OBJECT",
+            properties: {
+              reduce: { type: "STRING" },
+              reuse: { type: "STRING" },
+              recycle: { type: "STRING" }
+            },
+            required: ["reduce", "reuse", "recycle"]
           }
-        },
-        required: ["verdict", "reason", "recognized_item"]
-      }
+        : {
+            type: "OBJECT",
+            properties: {
+              verdict: {
+                type: "STRING",
+                enum: ["YES", "NO", "UNCLEAR"]
+              },
+              reason: {
+                type: "STRING"
+              },
+              recognized_item: {
+                type: "BOOLEAN"
+              },
+              actions: {
+                type: "OBJECT",
+                properties: {
+                  reduce: { type: "STRING" },
+                  reuse: { type: "STRING" },
+                  recycle: { type: "STRING" }
+                },
+                required: ["reduce", "reuse", "recycle"]
+              }
+            },
+            required: ["verdict", "reason", "recognized_item", "actions"]
+          }
     }
   };
 
@@ -349,6 +424,26 @@ export default async function handler(request, response) {
       );
     }
 
+
+    if (mode === "advice") {
+      const actions = {
+        reduce: safeString(result?.reduce),
+        reuse: safeString(result?.reuse),
+        recycle: safeString(result?.recycle)
+      };
+
+      if (!actions.reduce || !actions.reuse || !actions.recycle) {
+        return json(
+          response,
+          { error: "Gemini returned incomplete sustainability advice." },
+          502,
+          headers
+        );
+      }
+
+      return json(response, { actions }, 200, headers);
+    }
+
     const verdict = result?.verdict;
 
     if (!["YES", "NO", "UNCLEAR"].includes(verdict)) {
@@ -360,17 +455,27 @@ export default async function handler(request, response) {
       );
     }
 
+    const actions = result?.actions && typeof result.actions === "object"
+      ? {
+          reduce: safeString(result.actions.reduce),
+          reuse: safeString(result.actions.reuse),
+          recycle: safeString(result.actions.recycle)
+        }
+      : { reduce: "", reuse: "", recycle: "" };
+
     return json(
       response,
       {
         verdict,
         reason: safeString(result.reason),
         recognized_item: Boolean(result.recognized_item),
+        actions,
         sources: []
       },
       200,
       headers
     );
+
   } catch (error) {
     console.error("Eco Count verification error:", error);
 
