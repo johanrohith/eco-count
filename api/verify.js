@@ -1,27 +1,29 @@
-const MODEL = "gemini-2.5-flash";
+const MODEL = "gemini-3.5-flash-lite";
+
 const GEMINI_URL =
   `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent`;
 
 const MAX_ITEM_LENGTH = 120;
 const MAX_BODY_BYTES = 5000;
 
-// Small in-memory guard. Serverless instances are ephemeral, so this is only
-// a best-effort abuse reduction layer, not a permanent rate limiter.
 const ipBuckets = globalThis.__ecoCountIpBuckets || new Map();
 globalThis.__ecoCountIpBuckets = ipBuckets;
 
 function json(res, data, status = 200, extraHeaders = {}) {
   res.status(status);
+
   Object.entries({
     "Content-Type": "application/json; charset=utf-8",
     ...extraHeaders
   }).forEach(([key, value]) => res.setHeader(key, value));
+
   return res.json(data);
 }
 
 function getHeader(request, name) {
   const headers = request?.headers || {};
   const value = headers[name.toLowerCase()];
+
   if (Array.isArray(value)) return value[0] || "";
   return typeof value === "string" ? value : "";
 }
@@ -46,7 +48,9 @@ function corsHeaders(request) {
   if (allowed.includes("*")) {
     return {
       "Access-Control-Allow-Origin": "*",
-      "Vary": "Origin"
+      "Vary": "Origin",
+      "Access-Control-Allow-Methods": "POST, OPTIONS",
+      "Access-Control-Allow-Headers": "Content-Type"
     };
   }
 
@@ -81,6 +85,7 @@ function rateLimit(ip) {
       minuteStartedAt: now,
       minuteCount: 0
     };
+
     ipBuckets.set(ip, bucket);
   }
 
@@ -90,21 +95,31 @@ function rateLimit(ip) {
   }
 
   if (bucket.minuteCount >= 4) {
-    return { allowed: false, retryAfter: 60 };
+    return {
+      allowed: false,
+      retryAfter: 60
+    };
   }
 
   if (bucket.dayCount >= 40) {
-    return { allowed: false, retryAfter: 24 * 60 * 60 };
+    return {
+      allowed: false,
+      retryAfter: 24 * 60 * 60
+    };
   }
 
   bucket.minuteCount += 1;
   bucket.dayCount += 1;
 
-  return { allowed: true };
+  return {
+    allowed: true
+  };
 }
 
 function extractText(payload) {
-  const parts = payload?.candidates?.[0]?.content?.parts || [];
+  const parts =
+    payload?.candidates?.[0]?.content?.parts || [];
+
   return parts
     .filter(part => typeof part?.text === "string")
     .map(part => part.text)
@@ -113,69 +128,60 @@ function extractText(payload) {
 }
 
 function safeString(value) {
-  return typeof value === "string" ? value.trim() : "";
+  return typeof value === "string"
+    ? value.trim()
+    : "";
 }
-
 
 function buildClassifyPrompt(item) {
   return `
 You are the classification engine for Eco Count.
 
-The user entered this item:
+The user entered:
 "${item}"
 
-Classify the exact question:
-"can ${item} be plastic"
+Determine whether this item can be plastic.
 
-Use your general knowledge. Do NOT claim to have searched the web, and do not
-provide URLs or citations. Return ONLY JSON matching this schema:
+Return ONLY JSON matching this schema:
+
 {
   "verdict": "YES" | "NO" | "UNCLEAR",
   "reason": "short explanation",
-  "recognized_item": true | false,
-  "actions": {
-    "reduce": "short practical tip or empty string",
-    "reuse": "short practical tip or empty string",
-    "recycle": "short practical tip or empty string"
-  }
+  "recognized_item": true | false
 }
 
-Classification rules:
-- YES: the item can reasonably be made from plastic or is commonly a plastic product.
-- NO: the item as named is clearly not plastic and cannot reasonably be a plastic version.
-- UNCLEAR: the term is ambiguous, malformed, not a recognizable item, the answer
-  depends strongly on missing context, or you are not sufficiently confident.
-- If an item can reasonably be plastic, use YES even if it is also sold in
-  non-plastic versions.
-- Do not assume a precise resin/recycling code unless you know it reliably.
-- Do not classify a random word, person's name, place name, or malformed input
-  as an item.
-- Be conservative: when in doubt, return UNCLEAR rather than guessing.
+Rules:
 
-Advice rules for YES:
-- Generate item-specific advice for reducing future use, safely reusing the item,
-  and recycling/disposal.
-- Keep each tip to 1–2 concise sentences.
-- Recycling advice must acknowledge that local acceptance varies; do not claim a
-  specific local facility or collection program.
-- Never recommend unsafe food/drink reuse. Do not suggest reuse for food or drink
-  when the material, condition, or original purpose makes that unsafe.
-- Prefer practical actions a normal person can actually take.
-- For NO or UNCLEAR, return empty strings for all three actions.
+- YES when the named item can reasonably be made from plastic.
+- NO when the item clearly cannot be plastic.
+- UNCLEAR when the item is ambiguous, unknown, or there is not enough information.
+- Do not invent a specific resin code.
+- Do not use web search.
+- Base the answer on general knowledge.
 `;
 }
 
 function buildAdvicePrompt(item, plasticType, code) {
   return `
-You are Eco Count's sustainability advice engine.
+Eco Count has determined that this item is plastic or likely plastic.
 
-Eco Count has already determined that this item is plastic or likely plastic.
+Item:
+"${item}"
 
-Item: "${item}"
-Plastic type/material: "${plasticType || "Plastic"}"
-Resin code: ${code ?? "unknown"}
+Plastic type/material:
+"${plasticType || "Plastic"}"
 
-Return ONLY JSON matching this schema:
+Resin code:
+${code ?? "unknown"}
+
+Give concise, practical advice for:
+
+1. Reduce
+2. Reuse
+3. Recycle
+
+Return ONLY JSON:
+
 {
   "reduce": "short practical advice",
   "reuse": "short practical advice",
@@ -183,35 +189,47 @@ Return ONLY JSON matching this schema:
 }
 
 Rules:
-- Make the advice specific to the named item and material when possible.
-- Give one concise, realistic tip for each of reduce, reuse, and recycle.
-- Reduce should focus on avoiding or replacing future single-use plastic.
-- Reuse must be safe and realistic. Never recommend food/drink reuse when the
-  item is not clearly suitable, is damaged, has held chemicals, or hygiene is a concern.
-- Recycle advice must not claim that every plastic code is accepted everywhere.
-  Tell the user to check local municipal or recycler rules when relevant.
-- Do not invent collection centers, brands, laws, or local programs.
-- No URLs, citations, or web-search claims.
+
+- Make the advice specific to the item when possible.
+- Reduce should explain how to avoid or reduce future use.
+- Reuse must be safe and realistic.
+- Do not recommend food or drink reuse when the item is unsuitable, damaged,
+  contaminated, has contained chemicals, or hygiene is a concern.
+- Recycling rules vary by location, so do not claim that every plastic type
+  is accepted everywhere.
+- Tell the user to check local municipal/recycler rules when appropriate.
+- Do not invent recycling centres, laws, brands, or collection programs.
+- No URLs or citations.
 `;
 }
 
 export default async function handler(request, response) {
   const headers = corsHeaders(request);
 
-  Object.entries(headers).forEach(([key, value]) => response.setHeader(key, value));
+  Object.entries(headers).forEach(([key, value]) => {
+    response.setHeader(key, value);
+  });
 
   if (request.method === "OPTIONS") {
     return response.status(204).end();
   }
 
   if (request.method !== "POST") {
-    return json(response, { error: "Method not allowed." }, 405, headers);
+    return json(
+      response,
+      { error: "Method not allowed." },
+      405,
+      headers
+    );
   }
 
   if (!process.env.GEMINI_API_KEY) {
     return json(
       response,
-      { error: "Gemini verification is not configured on the backend." },
+      {
+        error:
+          "Gemini verification is not configured on the backend."
+      },
       503,
       headers
     );
@@ -220,13 +238,29 @@ export default async function handler(request, response) {
   const origin = getOrigin(request);
   const allowedOrigins = getAllowedOrigins();
 
-  if (origin && !allowedOrigins.includes("*") && !allowedOrigins.includes(origin)) {
-    return json(response, { error: "Origin not allowed." }, 403, headers);
+  if (
+    origin &&
+    !allowedOrigins.includes("*") &&
+    !allowedOrigins.includes(origin)
+  ) {
+    return json(
+      response,
+      { error: "Origin not allowed." },
+      403,
+      headers
+    );
   }
 
-  const contentLength = Number(getHeader(request, "content-length") || 0);
+  const contentLength =
+    Number(getHeader(request, "content-length") || 0);
+
   if (contentLength > MAX_BODY_BYTES) {
-    return json(response, { error: "Request body is too large." }, 413, headers);
+    return json(
+      response,
+      { error: "Request body is too large." },
+      413,
+      headers
+    );
   }
 
   let body = request.body;
@@ -235,46 +269,89 @@ export default async function handler(request, response) {
     try {
       body = JSON.parse(body);
     } catch {
-      return json(response, { error: "Invalid JSON request." }, 400, headers);
+      return json(
+        response,
+        { error: "Invalid JSON request." },
+        400,
+        headers
+      );
     }
   }
 
   if (!body || typeof body !== "object") {
-    return json(response, { error: "Invalid JSON request." }, 400, headers);
-  }
-
-  try {
-    const bodySize = Buffer.byteLength(JSON.stringify(body), "utf8");
-    if (bodySize > MAX_BODY_BYTES) {
-      return json(response, { error: "Request body is too large." }, 413, headers);
-    }
-  } catch {
-    return json(response, { error: "Invalid JSON request." }, 400, headers);
-  }
-
-  const mode = body?.mode === "advice" ? "advice" : "classify";
-  const item = safeString(body?.item);
-
-  if (!item) {
-    return json(response, { error: "Item is required." }, 400, headers);
-  }
-
-  if (item.length > MAX_ITEM_LENGTH) {
     return json(
       response,
-      { error: `Item must be ${MAX_ITEM_LENGTH} characters or fewer.` },
+      { error: "Invalid JSON request." },
       400,
       headers
     );
   }
 
-  const plasticType = safeString(body?.plasticType);
-  const rawCode = body?.code;
-  const code = rawCode === null || rawCode === undefined || rawCode === ""
-    ? null
-    : String(rawCode).trim().slice(0, 20);
+  try {
+    const bodySize =
+      Buffer.byteLength(JSON.stringify(body), "utf8");
 
-  const limit = rateLimit(getClientIp(request));
+    if (bodySize > MAX_BODY_BYTES) {
+      return json(
+        response,
+        { error: "Request body is too large." },
+        413,
+        headers
+      );
+    }
+  } catch {
+    return json(
+      response,
+      { error: "Invalid JSON request." },
+      400,
+      headers
+    );
+  }
+
+  const mode =
+    body?.mode === "advice"
+      ? "advice"
+      : "classify";
+
+  const item = safeString(body?.item);
+
+  if (!item) {
+    return json(
+      response,
+      { error: "Item is required." },
+      400,
+      headers
+    );
+  }
+
+  if (item.length > MAX_ITEM_LENGTH) {
+    return json(
+      response,
+      {
+        error:
+          `Item must be ${MAX_ITEM_LENGTH} characters or fewer.`
+      },
+      400,
+      headers
+    );
+  }
+
+  const plasticType =
+    safeString(body?.plasticType);
+
+  const rawCode = body?.code;
+
+  const code =
+    rawCode === null ||
+    rawCode === undefined ||
+    rawCode === ""
+      ? null
+      : String(rawCode)
+          .trim()
+          .slice(0, 20);
+
+  const limit =
+    rateLimit(getClientIp(request));
 
   if (!limit.allowed) {
     return json(
@@ -286,89 +363,120 @@ export default async function handler(request, response) {
       429,
       {
         ...headers,
-        "Retry-After": String(limit.retryAfter)
+        "Retry-After":
+          String(limit.retryAfter)
       }
     );
   }
-
 
   const bodyPayload = {
     contents: [
       {
         parts: [
           {
-            text: mode === "advice"
-              ? buildAdvicePrompt(item, plasticType, code)
-              : buildClassifyPrompt(item)
+            text:
+              mode === "advice"
+                ? buildAdvicePrompt(
+                    item,
+                    plasticType,
+                    code
+                  )
+                : buildClassifyPrompt(item)
           }
         ]
       }
     ],
+
     generationConfig: {
       temperature: 0,
       responseMimeType: "application/json",
-      responseSchema: mode === "advice"
-        ? {
-            type: "OBJECT",
-            properties: {
-              reduce: { type: "STRING" },
-              reuse: { type: "STRING" },
-              recycle: { type: "STRING" }
-            },
-            required: ["reduce", "reuse", "recycle"]
-          }
-        : {
-            type: "OBJECT",
-            properties: {
-              verdict: {
-                type: "STRING",
-                enum: ["YES", "NO", "UNCLEAR"]
-              },
-              reason: {
-                type: "STRING"
-              },
-              recognized_item: {
-                type: "BOOLEAN"
-              },
-              actions: {
-                type: "OBJECT",
-                properties: {
-                  reduce: { type: "STRING" },
-                  reuse: { type: "STRING" },
-                  recycle: { type: "STRING" }
+
+      responseSchema:
+        mode === "advice"
+          ? {
+              type: "OBJECT",
+              properties: {
+                reduce: {
+                  type: "STRING"
                 },
-                required: ["reduce", "reuse", "recycle"]
-              }
-            },
-            required: ["verdict", "reason", "recognized_item", "actions"]
-          }
+                reuse: {
+                  type: "STRING"
+                },
+                recycle: {
+                  type: "STRING"
+                }
+              },
+              required: [
+                "reduce",
+                "reuse",
+                "recycle"
+              ]
+            }
+
+          : {
+              type: "OBJECT",
+              properties: {
+                verdict: {
+                  type: "STRING",
+                  enum: [
+                    "YES",
+                    "NO",
+                    "UNCLEAR"
+                  ]
+                },
+
+                reason: {
+                  type: "STRING"
+                },
+
+                recognized_item: {
+                  type: "BOOLEAN"
+                }
+              },
+
+              required: [
+                "verdict",
+                "reason",
+                "recognized_item"
+              ]
+            }
     }
   };
 
   try {
-    const geminiResponse = await fetch(GEMINI_URL, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-goog-api-key": process.env.GEMINI_API_KEY
-      },
-      body: JSON.stringify(bodyPayload)
-    });
+    const geminiResponse =
+      await fetch(GEMINI_URL, {
+        method: "POST",
 
-    const responseText = await geminiResponse.text();
+        headers: {
+          "Content-Type":
+            "application/json",
+
+          "x-goog-api-key":
+            process.env.GEMINI_API_KEY
+        },
+
+        body:
+          JSON.stringify(bodyPayload)
+      });
+
+    const responseText =
+      await geminiResponse.text();
 
     let geminiData = null;
 
     try {
-      geminiData = JSON.parse(responseText);
+      geminiData =
+        JSON.parse(responseText);
     } catch {
       geminiData = null;
     }
 
     if (!geminiResponse.ok) {
-      const code = geminiResponse.status;
+      const status =
+        geminiResponse.status;
 
-      if (code === 429) {
+      if (status === 429) {
         return json(
           response,
           {
@@ -380,32 +488,53 @@ export default async function handler(request, response) {
         );
       }
 
-      if (code === 400 || code === 401 || code === 403) {
+      if (
+        status === 400 ||
+        status === 401 ||
+        status === 403
+      ) {
+        console.error(
+          "Gemini API error:",
+          responseText
+        );
+
         return json(
           response,
           {
             error:
-              "Gemini rejected the verification request. Check the Gemini project, key, and Free Tier configuration."
+              "Gemini rejected the verification request."
           },
           502,
           headers
         );
       }
 
+      console.error(
+        "Gemini API error:",
+        responseText
+      );
+
       return json(
         response,
-        { error: "Gemini verification is temporarily unavailable." },
+        {
+          error:
+            "Gemini verification is temporarily unavailable."
+        },
         503,
         headers
       );
     }
 
-    const text = extractText(geminiData);
+    const text =
+      extractText(geminiData);
 
     if (!text) {
       return json(
         response,
-        { error: "Gemini returned no classification." },
+        {
+          error:
+            "Gemini returned no classification."
+        },
         502,
         headers
       );
@@ -418,58 +547,87 @@ export default async function handler(request, response) {
     } catch {
       return json(
         response,
-        { error: "Gemini returned an invalid classification." },
+        {
+          error:
+            "Gemini returned invalid JSON."
+        },
         502,
         headers
       );
     }
 
-
+    // NEW: advice request
     if (mode === "advice") {
       const actions = {
-        reduce: safeString(result?.reduce),
-        reuse: safeString(result?.reuse),
-        recycle: safeString(result?.recycle)
+        reduce:
+          safeString(result?.reduce),
+
+        reuse:
+          safeString(result?.reuse),
+
+        recycle:
+          safeString(result?.recycle)
       };
 
-      if (!actions.reduce || !actions.reuse || !actions.recycle) {
+      if (
+        !actions.reduce ||
+        !actions.reuse ||
+        !actions.recycle
+      ) {
         return json(
           response,
-          { error: "Gemini returned incomplete sustainability advice." },
+          {
+            error:
+              "Gemini returned incomplete sustainability advice."
+          },
           502,
           headers
         );
       }
 
-      return json(response, { actions }, 200, headers);
-    }
-
-    const verdict = result?.verdict;
-
-    if (!["YES", "NO", "UNCLEAR"].includes(verdict)) {
       return json(
         response,
-        { error: "Gemini returned an invalid verdict." },
+        { actions },
+        200,
+        headers
+      );
+    }
+
+    // ORIGINAL CLASSIFICATION FLOW
+    const verdict =
+      result?.verdict;
+
+    if (
+      ![
+        "YES",
+        "NO",
+        "UNCLEAR"
+      ].includes(verdict)
+    ) {
+      return json(
+        response,
+        {
+          error:
+            "Gemini returned an invalid verdict."
+        },
         502,
         headers
       );
     }
 
-    const actions = result?.actions && typeof result.actions === "object"
-      ? {
-          reduce: safeString(result.actions.reduce),
-          reuse: safeString(result.actions.reuse),
-          recycle: safeString(result.actions.recycle)
-        }
-      : { reduce: "", reuse: "", recycle: "" };
-
     return json(
       response,
       {
         verdict,
-        reason: safeString(result.reason),
-        recognized_item: Boolean(result.recognized_item),
-        actions,
+
+        reason:
+          safeString(result?.reason),
+
+        recognized_item:
+          Boolean(
+            result?.recognized_item
+          ),
+
         sources: []
       },
       200,
@@ -477,11 +635,17 @@ export default async function handler(request, response) {
     );
 
   } catch (error) {
-    console.error("Eco Count verification error:", error);
+    console.error(
+      "Eco Count verification error:",
+      error
+    );
 
     return json(
       response,
-      { error: "Gemini verification is temporarily unavailable." },
+      {
+        error:
+          "Gemini verification is temporarily unavailable."
+      },
       503,
       headers
     );
