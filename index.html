@@ -1,149 +1,174 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta name="theme-color" content="#1B4332">
-  <title>Eco Count — Plastic Tracker</title>
+  <meta name="theme-color" content="#f4efdf">
+  <meta name="description" content="Track the plastic you use, understand your habits, and find simple ways to reduce waste.">
+  <title>Eco Count — Know it. Count it. Reduce it.</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='18' fill='%231b4332'/%3E%3Cpath d='M45 14C25 14 14 25 17 41c2 11 13 13 20 5 8-8 7-22 8-32Z' fill='%23b8d9c5'/%3E%3Cpath d='M18 49c7-11 14-17 24-25' stroke='%23f4efdf' stroke-width='3' fill='none' stroke-linecap='round'/%3E%3C/svg%3E">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Playfair+Display:wght@600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
-
-<header class="shell nav">
-  <div class="brand">
-    <div class="brand-name">Eco Count</div>
-    <div class="brand-tag">plastic tracker · v3</div>
-  </div>
-  <div class="count-pill" id="countPill">Total plastic count: 0</div>
-</header>
-
-<main class="shell">
-
-  <section class="hero">
-    <p class="eyebrow">Your plastic history</p>
-    <h1>What plastic did you use lastly?</h1>
-    <p class="hero-copy">
-      Tell Eco Count what you used. It first checks its local knowledge base.
-      When it cannot classify the item, it asks Gemini to classify it.
-    </p>
-  </section>
-
-  <section class="checker">
-    <form id="checkForm" class="input-row" autocomplete="off">
-      <label class="sr-only" for="itemInput">What plastic did you use lastly?</label>
-      <div class="input-wrap">
-        <span class="input-icon">→</span>
-        <input id="itemInput" maxlength="120"
-               placeholder="e.g. water bottle, cup, banana skin..."
-               aria-label="Item you used lastly">
-      </div>
-      <button id="checkButton" class="check-btn" type="submit">Check item</button>
-    </form>
-    <p class="helper">
-      Common items are checked instantly. Unknown items are verified through the free Gemini fallback.
-    </p>
-  </section>
-
-  <section class="result" id="result" aria-live="polite" aria-atomic="true">
-    <div class="result-top">
-      <div class="expression" id="expression">😞</div>
-      <button class="dismiss" id="dismissButton" type="button">Close</button>
-    </div>
-
-    <div class="result-label" id="resultLabel"></div>
-    <h2 id="resultTitle"></h2>
-    <div class="result-sub" id="resultSub"></div>
-    <p class="result-text" id="resultText"></p>
-
-    <div class="result-grid" id="resultGrid">
-      <div class="result-item">
-        <strong>Material</strong>
-        <span id="resultMaterial"></span>
-      </div>
-      <div class="result-item">
-        <strong>Why</strong>
-        <span id="resultWhy"></span>
-      </div>
-      <div class="result-item">
-        <strong>Source</strong>
-        <span id="resultSource"></span>
-      </div>
-    </div>
-    <div class="actions-box" id="actionsBox" hidden>
-    <div class="action-card">
-        <h3>♻️ Reduce</h3>
-        <p id="reduceAction"></p>
-    </div>
-
-    <div class="action-card">
-        <h3>🔄 Reuse</h3>
-        <p id="reuseAction"></p>
-    </div>
-
-    <div class="action-card">
-        <h3>♻️ Recycle</h3>
-        <p id="recycleAction"></p>
-    </div>
-    </div>
-
-    <div class="sources" id="sourcesBox"></div>
-
-    <div class="actions-box" id="actionsBox" hidden>
-      <div class="actions-head">
-        <div>
-          <h3>What can you do with it?</h3>
-          <p>Gemini suggests practical ways to reduce, reuse, and recycle this plastic.</p>
+  <header class="shell topbar">
+    <a class="brand" href="#top" aria-label="Eco Count home">Eco Count<span class="brand-dot">.</span></a>
+    <div class="topbar-actions">
+      <div class="count-pill" aria-live="polite">Total plastic count: <strong id="countPill">0</strong></div>
+      <div class="menu-wrap">
+        <button class="icon-button menu-toggle" id="menuToggle" type="button" aria-label="Open menu" aria-expanded="false" aria-controls="siteMenu">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
+        </button>
+        <div class="site-menu" id="siteMenu" hidden>
+          <button type="button" id="exportCsv">Export history as CSV</button>
+          <button type="button" id="backupJson">Back up data (JSON)</button>
+          <button type="button" id="importBackup">Restore backup</button>
+          <button type="button" id="clearHistoryMenu" class="menu-danger">Clear all history</button>
         </div>
-        <span class="ai-pill">Gemini AI</span>
-      </div>
-
-      <div class="actions-grid">
-        <article class="action-card">
-          <div class="action-icon">↓</div>
-          <div>
-            <strong>Reduce</strong>
-            <p id="reduceAction"></p>
-          </div>
-        </article>
-
-        <article class="action-card">
-          <div class="action-icon">↻</div>
-          <div>
-            <strong>Reuse</strong>
-            <p id="reuseAction"></p>
-          </div>
-        </article>
-
-        <article class="action-card">
-          <div class="action-icon">♻</div>
-          <div>
-            <strong>Recycle</strong>
-            <p id="recycleAction"></p>
-          </div>
-        </article>
+        <input class="sr-only" id="backupInput" type="file" accept="application/json,.json">
       </div>
     </div>
-  </section>
+  </header>
 
-  <section class="history-section">
-    <div class="history-head">
-      <div>
-        <h2 class="section-title">History</h2>
-        <p class="section-note">Only Plastic and Likely plastic results are recorded.</p>
+  <main id="top" class="shell">
+    <section class="hero" aria-labelledby="heroTitle">
+      <div class="hero-copy-block">
+        <p class="eyebrow">Your plastic footprint</p>
+        <h1 id="heroTitle">What plastic did you use today?</h1>
+        <p class="hero-copy">Track what you use. Understand your habits. Find simple ways to reduce plastic.</p>
       </div>
-      <button class="clear-btn" id="clearHistory" type="button">Clear history</button>
-    </div>
+      <div class="hero-art" aria-hidden="true">
+        <svg viewBox="0 0 520 400" role="img">
+          <defs>
+            <linearGradient id="bottleGlass" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#e5f1e9" stop-opacity=".88"/><stop offset=".5" stop-color="#fffdf5" stop-opacity=".65"/><stop offset="1" stop-color="#b9d7c6" stop-opacity=".8"/></linearGradient>
+            <linearGradient id="wrapperGreen" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#164b36"/><stop offset="1" stop-color="#46785e"/></linearGradient>
+            <filter id="softShadow" x="-30%" y="-30%" width="160%" height="180%"><feDropShadow dx="0" dy="12" stdDeviation="11" flood-color="#244936" flood-opacity=".15"/></filter>
+          </defs>
+          <path d="M251 60C323 1 415 34 459 94c47 63 37 173-22 225-44 39-126 26-173 4-72-33-122-91-108-157 8-39 48-69 95-106Z" fill="#dce3c9"/>
+          <g fill="#8da98a" opacity=".9"><path d="M82 188c-31-30-28-55-5-69 25 24 21 48 5 69Z"/><path d="M95 197c3-34 19-51 44-43-1 28-18 44-44 43Z"/><path d="M433 115c20-30 40-33 52-14-16 23-34 27-52 14Z"/><path d="M445 140c25-18 45-15 50 4-23 16-41 13-50-4Z"/><path d="M425 311c-9-27 0-45 21-49 10 24 1 42-21 49Z"/></g>
+          <g stroke="#6e916f" stroke-width="2" fill="none" stroke-linecap="round"><path d="M83 195c-3-25-8-45-14-64"/><path d="M432 150c10-13 23-28 39-40"/><path d="M426 313c8-20 17-35 29-48"/></g>
+          <g filter="url(#softShadow)" transform="translate(38 201) rotate(-12 93 77)">
+            <path d="M15 17 174 2l17 24-6 105-17 18-146-4-15-16Z" fill="url(#wrapperGreen)"/>
+            <path d="m14 20 160-15M19 135l145 6" stroke="#8db69a" stroke-width="2" opacity=".7"/>
+            <path d="M57 62c14-21 38-23 54-9 11 10 11 30-2 41-14 12-37 9-51-8-5-7-5-16-1-24Z" fill="#d4bd82"/>
+            <path d="M66 66c16-12 31-9 41 2" fill="none" stroke="#eee0b9" stroke-width="3" stroke-linecap="round"/>
+          </g>
+          <g filter="url(#softShadow)" transform="translate(208 16) rotate(-5 65 170)">
+            <rect x="49" y="15" width="40" height="28" rx="7" fill="#285b42"/>
+            <path d="M48 40h42v28c0 10 14 20 18 35l17 183c2 22-10 32-31 34H41c-21 0-33-12-30-34L28 103c1-15 20-25 20-35Z" fill="url(#bottleGlass)" stroke="#aac6b5" stroke-width="2"/>
+            <path d="M31 128c28 10 54 12 83 0M27 161c29 10 60 10 91-1M23 194c32 12 66 12 100 0M20 225c35 12 70 12 108 0M17 253c37 12 75 12 113 0" fill="none" stroke="#9dbca9" stroke-width="5" opacity=".48"/>
+            <path d="M41 78c-10 43-17 117-22 171" fill="none" stroke="#fff" stroke-width="8" stroke-linecap="round" opacity=".7"/>
+            <path d="M49 15v-5h40v5" fill="#1b4332"/>
+          </g>
+          <g filter="url(#softShadow)" transform="translate(352 170) rotate(4 61 97)">
+            <path d="M18 44h87l-9 144c-2 22-15 31-36 29-21-1-31-12-31-33Z" fill="#f8f7ec" fill-opacity=".82" stroke="#c8d1bc" stroke-width="2"/>
+            <ellipse cx="61" cy="44" rx="44" ry="15" fill="#fffdf4" stroke="#c8d1bc" stroke-width="2"/>
+            <ellipse cx="61" cy="44" rx="34" ry="8" fill="#dfe8d9"/>
+            <path d="M81 -17 88 48" stroke="#315d43" stroke-width="7" stroke-linecap="round"/>
+            <path d="M47 83c9 7 19 7 28 0M43 112c13 7 24 7 37 0" stroke="#d3ddcf" stroke-width="3" fill="none"/>
+          </g>
+          <g filter="url(#softShadow)" transform="translate(211 284) rotate(4 126 43)">
+            <path d="M14 22 65 4h142l52 19-11 51-49 15H62L6 70Z" fill="#e8dfc9" stroke="#c9c0a9" stroke-width="2"/>
+            <path d="M25 24h217l-8 32H31Z" fill="#f8f5e9" stroke="#d1c8b4" stroke-width="2"/>
+            <path d="M62 4 65 22M205 4l-3 18" stroke="#d3c9b5" stroke-width="2"/>
+          </g>
+          <path d="M103 341c62 20 111 17 147 4" stroke="#c2ceb8" stroke-width="2" fill="none" stroke-dasharray="4 7"/>
+        </svg>
+      </div>
+    </section>
 
-    <div class="history" id="history">
-      <div class="history-empty">No plastic items recorded yet.</div>
-    </div>
-  </section>
+    <section class="checker" aria-label="Check a plastic item">
+      <form id="checkForm" class="input-row" autocomplete="off">
+        <label class="sr-only" for="itemInput">Describe an item</label>
+        <div class="input-wrap">
+          <span class="input-arrow" aria-hidden="true">→</span>
+          <input id="itemInput" maxlength="120" placeholder="e.g. water bottle, food wrapper, cup…" aria-label="Item you used">
+          <button type="button" class="camera-button" id="cameraButton" aria-label="Scan an item with your camera" title="Scan an item with your camera">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7.5h3l1.4-2h7.2l1.4 2h3v11H4z"/><circle cx="12" cy="13" r="3.4"/></svg>
+          </button>
+          <input id="cameraInput" class="sr-only" type="file" accept="image/*" capture="environment">
+        </div>
+        <button id="checkButton" class="check-btn" type="submit">Check item <span aria-hidden="true">→</span></button>
+      </form>
+      <div class="photo-preview" id="photoPreview" hidden>
+        <img id="previewImage" alt="Selected item for scanning">
+        <div class="preview-copy"><strong>Photo ready to scan</strong><span id="previewName">Your photo is ready.</span></div>
+        <button type="button" class="remove-photo" id="removePhoto" aria-label="Remove selected photo">×</button>
+      </div>
+      <p class="helper" id="helperText">Common items are checked instantly. Unknown items are verified through Gemini. Your photo stays in this browser while it is processed.</p>
+    </section>
 
+    <section class="result" id="result" aria-live="polite" aria-atomic="false" hidden>
+      <div class="result-heading">
+        <div class="result-symbol" id="expression" aria-hidden="true">✓</div>
+        <div class="result-heading-copy"><p class="result-label" id="resultLabel">ITEM CHECKED</p><h2 id="resultTitle"></h2><p id="resultSub" class="result-sub"></p></div>
+        <button class="dismiss icon-button" id="dismissButton" type="button" aria-label="Close result">×</button>
+      </div>
+      <p class="result-text" id="resultText"></p>
+      <div class="result-grid" id="resultGrid">
+        <div class="result-item"><span>Material</span><strong id="resultMaterial"></strong></div>
+        <div class="result-item"><span>What we know</span><strong id="resultWhy"></strong></div>
+        <div class="result-item"><span>Source</span><strong id="resultSource"></strong></div>
+      </div>
+      <div class="sources" id="sourcesBox"></div>
+      <div class="add-row" id="addRow" hidden>
+        <label for="quantityInput">Quantity</label>
+        <div class="quantity-control"><button type="button" id="quantityMinus" aria-label="Decrease quantity">−</button><input id="quantityInput" type="number" min="1" max="999" value="1" inputmode="numeric"><button type="button" id="quantityPlus" aria-label="Increase quantity">+</button></div>
+        <button type="button" class="add-button" id="addToHistory">Add to history <span aria-hidden="true">→</span></button>
+      </div>
+      <p class="added-message" id="addedMessage" hidden>Added to your history.</p>
+    </section>
 
-</main>
+    <section class="stats-section" aria-label="Your plastic footprint summary">
+      <div class="stats-grid">
+        <article class="stat-card">
+          <div class="stat-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="5" width="16" height="16" rx="2"/><path d="M8 3v4M16 3v4M4 10h16M8 14h3"/></svg></div>
+          <p class="stat-label">This week</p><div class="stat-number" id="weekCount">0</div><div class="stat-foot" id="weekCompare">Start with your first item</div>
+        </article>
+        <article class="stat-card">
+          <div class="stat-icon leaf-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20.5 3.5C11 3 5 6.4 4.1 12.2 3.4 16.4 6.2 20 10 19.3c6.2-1.1 9.5-8.2 10.5-15.8Z"/><path d="M4.5 20c3.4-5.2 7-8.5 12.2-11.7"/></svg></div>
+          <p class="stat-label">Different items</p><div class="stat-number" id="uniqueCount">0</div><div class="stat-foot">Types in your history</div>
+        </article>
+        <article class="stat-card stat-card-top">
+          <div class="stat-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20V11h4v9M10 20V5h4v15M16 20V8h4v12M3 20h18"/></svg></div>
+          <p class="stat-label">Most logged</p><div class="stat-number stat-name" id="topItem">—</div><div class="stat-foot" id="topItemCount">Waiting for your first entry</div>
+        </article>
+      </div>
+    </section>
 
-<footer class="shell">Eco Count · Know it · Count it · Remember it</footer>
+    <section class="insights-grid" aria-label="Plastic use insights">
+      <article class="panel trend-panel">
+        <div class="panel-heading"><div><p class="panel-kicker">YOUR ACTIVITY</p><h2>Weekly trend</h2></div><span class="period-label">Last 7 days</span></div>
+        <div class="chart" id="weeklyChart" role="img" aria-label="Number of plastic items recorded in the last seven days"></div>
+        <p class="chart-foot" id="chartFoot">Your daily count will appear here as you track items.</p>
+      </article>
+      <article class="panel recommendation-panel">
+        <div class="recommendation-art" aria-hidden="true"><svg viewBox="0 0 120 210"><ellipse cx="65" cy="103" rx="48" ry="83" fill="#dce5d0"/><path d="M41 44h37l-3 13 9 15v91c0 14-7 20-24 20s-24-6-24-20V72l9-15Z" fill="#24553d"/><rect x="44" y="38" width="31" height="13" rx="3" fill="#163b2b"/><path d="M48 74v75" stroke="#77a487" stroke-width="4" stroke-linecap="round" opacity=".7"/></svg></div>
+        <div class="recommendation-content"><p class="panel-kicker">A SMALL CHANGE TO TRY</p><h2 id="recommendationTitle">Small habits add up.</h2><p id="recommendationText">Start by tracking what you use. Eco Count will suggest a practical change based on your most common items.</p><button type="button" class="text-link" id="recommendationAction">How to get started <span aria-hidden="true">↗</span></button></div>
+      </article>
+    </section>
 
-<script src="script.js"></script>
+    <section class="history-section" id="historySection">
+      <div class="section-heading-row"><div><p class="panel-kicker">YOUR RECORD</p><h2 class="section-title">Recent history</h2><p class="section-note" id="historySummary">The items you record will appear here.</p></div><div class="history-tools"><label class="search-box"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.8" cy="10.8" r="6.8"/><path d="m16 16 4 4"/></svg><input type="search" id="historySearch" placeholder="Find an item" aria-label="Search history"></label><button class="view-all" id="viewAllButton" type="button">View all <span aria-hidden="true">→</span></button></div></div>
+      <div class="history" id="history"><div class="history-empty"><span class="empty-mark" aria-hidden="true">✳</span><strong>Your history starts here.</strong><span>Check an item above and add it to begin tracking your plastic footprint.</span></div></div>
+      <p class="history-disclaimer">Material codes are common resin identifiers, not a guarantee that an item is accepted for recycling locally.</p>
+    </section>
+  </main>
+
+  <footer class="shell footer"><span class="footer-brand">Eco Count<span class="brand-dot">.</span></span><span>Know it · Count it · Reduce it</span><a href="#top">Back to top ↑</a></footer>
+
+  <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+
+  <dialog class="edit-dialog" id="editDialog" aria-labelledby="editTitle">
+    <form id="editForm" method="dialog">
+      <div class="dialog-heading"><div><p class="panel-kicker">YOUR HISTORY</p><h2 id="editTitle">Edit entry</h2></div><button type="button" class="icon-button" id="closeEdit" aria-label="Close editor">×</button></div>
+      <label class="field-label" for="editItemInput">Item name</label><input class="dialog-input" id="editItemInput" maxlength="120" required>
+      <label class="field-label" for="editQuantityInput">Quantity</label><input class="dialog-input" id="editQuantityInput" type="number" min="1" max="999" required>
+      <div class="dialog-actions"><button type="button" class="secondary-button" id="cancelEdit">Cancel</button><button type="submit" class="check-btn">Save changes</button></div>
+    </form>
+  </dialog>
+  <script src="script.js"></script>
 </body>
 </html>
