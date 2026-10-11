@@ -20,6 +20,7 @@ const els = {
   result: $("result"), expression: $("expression"), resultLabel: $("resultLabel"), resultTitle: $("resultTitle"),
   resultSub: $("resultSub"), resultText: $("resultText"), resultGrid: $("resultGrid"), resultMaterial: $("resultMaterial"),
   resultWhy: $("resultWhy"), resultSource: $("resultSource"), sourcesBox: $("sourcesBox"), dismiss: $("dismissButton"),
+  actionPlan: $("actionPlan"), reduceAdvice: $("reduceAdvice"), reuseAdvice: $("reuseAdvice"), recycleAdvice: $("recycleAdvice"),
   history: $("history"), clearHistory: $("clearHistoryMenu"), historySearch: $("historySearch"), viewAll: $("viewAllButton"),
   cameraButton: $("cameraButton"), cameraInput: $("cameraInput"), photoPreview: $("photoPreview"), previewImage: $("previewImage"),
   previewName: $("previewName"), removePhoto: $("removePhoto"), quantityInput: $("quantityInput"), addRow: $("addRow"),
@@ -151,6 +152,68 @@ function showToast(message) {
   if (toastTimer) clearTimeout(toastTimer);
   toastTimer = setTimeout(() => { els.toast.hidden = true; }, 3200);
 }
+function getPlasticActionAdvice(item, material = "", code = null) {
+  const name = normalize(item);
+  const kind = normalize(material);
+  const has = (...terms) => terms.some(term => name.includes(term));
+  let reduce = "Before buying another, consider whether you need it. Choose an option with less packaging or a durable alternative when practical.";
+  let reuse = "Reuse it only if it is clean, intact, and designed for that purpose. Avoid reusing damaged or single-use packaging for food or drink unless it is considered food-safe.";
+  let recycle = "Empty it and remove leftover contents. Check your local council or waste service to see whether this item and its material are accepted.";
+
+  if (has("water bottle", "drink bottle", "drinking bottle", "soda bottle", "soft drink bottle", "pet bottle", "plastic bottle", "juice bottle")) {
+    reduce = "Carry a durable refillable bottle and refill it with safe drinking water instead of buying another single-use bottle.";
+    reuse = "If it is a single-use bottle, avoid repeated long-term use or use when scratched, cloudy, or damaged. A bottle designed for reuse is a better everyday choice.";
+    recycle = "Empty and rinse it. Check whether your local programme accepts PET bottles, and follow its instructions for the cap and label.";
+  } else if (has("shopping bag", "plastic bag", "carry bag", "grocery bag", "polythene bag", "t shirt bag")) {
+    reduce = "Keep a reusable shopping bag near your door or in your backpack so you can decline an extra bag.";
+    reuse = "Use a clean, undamaged bag again for shopping or for lining a small bin if appropriate. Keep it away from children and pets.";
+    recycle = "Keep it out of ordinary recycling unless your local service specifically accepts flexible bags; some shops or special drop-off points collect them.";
+  } else if (has("wrapper", "snack packet", "chip packet", "chips packet", "sweet wrapper", "candy wrapper", "biscuit packet", "food wrapper", "sachet", "laminated")) {
+    reduce = "Choose a larger pack instead of many individual sachets, buy loose options where practical, or pick products with less packaging.";
+    reuse = "Most thin or laminated wrappers are not suitable for food storage or ordinary reuse. Keep them clean for a craft only if useful, otherwise avoid accumulating them.";
+    recycle = "Many multilayer wrappers are not accepted in household recycling. Check local guidance or a verified special collection programme rather than assuming the wrapper is recyclable.";
+  } else if (has("cup", "coffee cup", "tea cup", "disposable cup", "plastic tumbler")) {
+    reduce = "Bring a reusable cup or choose dine-in service when practical, and decline disposable lids or cups you do not need.";
+    reuse = "A sturdy cup intended for repeated use can be washed and reused. Do not reuse a disposable cup if it is cracked, warped, or not designed for repeated use.";
+    recycle = "Empty and rinse it. Check local acceptance: plastic cups may use a different resin from bottles and may not be accepted in the same stream.";
+  } else if (has("straw", "straws", "cutlery", "spoon", "fork", "knife", "stirrer", "chopstick")) {
+    reduce = "Skip disposable accessories when you do not need them, or carry a washable reusable set.";
+    reuse = "If the item is designed to be washable and reusable, clean it thoroughly and store it dry. Do not reuse damaged single-use cutlery.";
+    recycle = "Small items are often missed by sorting equipment and may not be accepted. Follow local rules; don't put them in recycling unless accepted.";
+  } else if (has("container", "takeaway box", "takeout box", "food box", "lunch box", "meal tray", "clamshell", "yogurt tub", "yoghurt tub", "ice cream tub")) {
+    reduce = "Bring a reusable food container where shops or food vendors allow it, or choose products with less packaging.";
+    reuse = "If the container is marked or intended for reuse and remains in good condition, wash it and reuse it for its intended purpose. Avoid heating food in it unless it is labelled microwave-safe.";
+    recycle = "Scrape out food and rinse it. Check whether your local programme accepts this type of tub or tray; acceptance can differ even between similar-looking plastics.";
+  } else if (has("packaging", "plastic film", "cling film", "bubble wrap", "stretch wrap", "pouch", "mailing bag", "postal bag", "air pillow")) {
+    reduce = "Choose products with minimal packaging, combine orders when sensible, or ask suppliers for reusable or recyclable packaging.";
+    reuse = "Use clean, undamaged packaging to protect items when storing or sending parcels again.";
+    recycle = "Film and padded packaging are often excluded from curbside recycling. Check for a local drop-off scheme and keep the material clean and dry.";
+  } else if (has("toothbrush", "razor", "pen", "comb", "toothpaste tube")) {
+    reduce = "Choose a durable version or a product with replaceable parts when available, and avoid buying more than you need.";
+    reuse = "Keep using it while it is safe and works as intended; clean it regularly and replace it when worn or unhygienic.";
+    recycle = "These mixed-part or small items are often not accepted in household recycling. Check the manufacturer's take-back options or local special collection rules.";
+  } else if (has("electronics", "charger", "cable", "phone case", "headphone", "earphone", "keyboard", "mouse")) {
+    reduce = "Repair or keep using the item for longer when safe, and consider refurbished products before replacing it.";
+    reuse = "If it still works, pass it on, donate it, or repurpose it safely rather than throwing it away.";
+    recycle = "Do not place electronic items in ordinary household recycling. Use an authorised e-waste collection or take-back programme.";
+  } else if (code === 3 || kind.includes("pvc")) {
+    recycle = "PVC acceptance varies widely and is often limited. Do not assume curbside recycling accepts it; check the local waste service or a specialist collection point.";
+  } else if (code === 6 || kind.includes("ps") || kind.includes("polystyrene")) {
+    recycle = "Polystyrene is not accepted by many household recycling programmes. Check local rules or a specialist collection point before disposing of it.";
+  } else if (code === 7 || kind.includes("other plastic")) {
+    recycle = "This category includes different plastics, so the code alone is not enough. Check the product label and local collection guidance.";
+  }
+  return { reduce, reuse, recycle };
+}
+function showPlasticActionPlan(candidate) {
+  const isPlastic = candidate && ["plastic", "likely plastic"].includes(normalize(candidate.status));
+  els.actionPlan.hidden = !isPlastic;
+  if (!isPlastic) return;
+  const advice = getPlasticActionAdvice(candidate.item, candidate.type, candidate.code);
+  els.reduceAdvice.textContent = advice.reduce;
+  els.reuseAdvice.textContent = advice.reuse;
+  els.recycleAdvice.textContent = advice.recycle;
+}
 function showBaseResult({ expression = "✓", label, title, sub = "", text = "", material = "", why = "", source = "", sourceLinks = [], canAdd = false, grid = true, candidate = null }) {
   currentCandidate = candidate;
   els.result.hidden = false;
@@ -164,6 +227,7 @@ function showBaseResult({ expression = "✓", label, title, sub = "", text = "",
   els.resultWhy.textContent = why;
   els.resultSource.textContent = source;
   els.sourcesBox.innerHTML = sourceLinks.length ? sourceLinks.map(link => `<a href="${escapeHtml(link.url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(link.title || "Open source")}</a>`).join("") : "";
+  showPlasticActionPlan(canAdd ? candidate : null);
   els.addRow.hidden = !canAdd;
   els.addedMessage.hidden = true;
   els.addToHistory.disabled = false;

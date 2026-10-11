@@ -11,3 +11,21 @@
 @media(prefers-reduced-motion:reduce){*,*::before,*::after{scroll-behavior:auto!important;transition:none!important;animation:none!important}}
 /* Explicitly retain native hidden semantics for elements that otherwise use display:flex/grid. */
 .photo-preview[hidden],.view-all[hidden],.row-menu[hidden],.site-menu[hidden],.toast[hidden],.added-message[hidden],.result-grid[hidden]{display:none!important}
+
+/* Item-specific Reduce / Reuse / Recycle guidance */
+.action-plan{margin-top:20px;padding-top:19px;border-top:1px solid rgba(255,255,255,.15)}
+.action-plan[hidden]{display:none!important}
+.action-plan-heading{margin-bottom:13px}
+.action-plan-kicker{margin:0 0 6px;color:#b8d2be;font-size:9px;font-weight:700;letter-spacing:.14em}
+.action-plan-heading h3{margin:0;color:#fffdf5;font:700 23px/1.2 "Playfair Display",Georgia,serif}
+.action-plan-heading>p:last-child{margin:6px 0 0;color:#d0ddd2;font-size:12px;line-height:1.5}
+.action-plan-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+.action-tip{position:relative;min-width:0;padding:15px 14px 16px;border:1px solid rgba(255,255,255,.16);border-radius:15px;background:rgba(255,253,245,.96);color:var(--forest)}
+.action-tip-number{display:inline-grid;place-items:center;width:27px;height:27px;margin-bottom:10px;border-radius:50%;background:#e1eadc;color:#2d6345;font-size:10px;font-weight:800;letter-spacing:.02em}
+.action-tip h4{margin:0 0 7px;color:var(--forest);font-size:14px;font-weight:750}
+.action-tip p{margin:0;color:#526055;font-size:11px;line-height:1.6;overflow-wrap:anywhere}
+.reduce-tip .action-tip-number{background:#f3dfc9;color:#925021}
+.reuse-tip .action-tip-number{background:#dce8d8;color:#2f6c46}
+.recycle-tip .action-tip-number{background:#dce8e9;color:#315e67}
+.recycling-note{margin:12px 0 0;color:#cbd8ce;font-size:10px;line-height:1.55}
+@media(max-width:560px){.action-plan{margin-top:17px;padding-top:16px}.action-plan-heading h3{font-size:21px}.action-plan-grid{grid-template-columns:1fr;gap:8px}.action-tip{display:grid;grid-template-columns:32px minmax(0,1fr);column-gap:10px;padding:13px 13px 14px}.action-tip-number{grid-row:span 2;margin:1px 0 0}.action-tip h4{align-self:center;margin:0 0 5px}.action-tip p{grid-column:2;font-size:11px}.recycling-note{font-size:10px}}
